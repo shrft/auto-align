@@ -1,10 +1,49 @@
 var vscode = require( 'vscode' ),
     path = require( 'path' );
+    // stringWidth = require('string-width');
 
 var startEndField;
 var innerField;
 
 var lastVersion;
+
+const stripAnsi = require('strip-ansi');
+const isFullwidthCodePoint = require('is-fullwidth-code-point');
+const emojiRegex = require('emoji-regex');
+const stringWidth = string => {
+	string = string.replace(emojiRegex(), '  ');
+
+	if (typeof string !== 'string' || string.length === 0) {
+		return 0;
+	}
+
+	string = stripAnsi(string);
+
+	let width = 0;
+
+	for (let i = 0; i < string.length; i++) {
+		const code = string.codePointAt(i);
+
+		// Ignore control characters
+		if (code <= 0x1F || (code >= 0x7F && code <= 0x9F)) {
+			continue;
+		}
+
+		// Ignore combining characters
+		if (code >= 0x300 && code <= 0x36F) {
+			continue;
+		}
+
+		// Surrogates
+		if (code > 0xFFFF) {
+			i++;
+		}
+
+		width += isFullwidthCodePoint(code) ? 1.666 : 1;
+	}
+
+	return width;
+};
 
 function getSplitRegex( separator )
 {
@@ -76,7 +115,8 @@ function activate( context )
     {
         if( count > 0 )
         {
-            var padAmount = text ? ( count - text.length ) : count;
+            // https://www.npmjs.com/package/string-width
+            var padAmount = text ? ( count - Math.ceil(stringWidth(text)) ) : count;
             return ( text ? text : "" ) + ' '.repeat( padAmount );
         }
         else if( count < 0 )
@@ -102,7 +142,7 @@ function activate( context )
 
     function maxLength( texts, partIndex )
     {
-        return texts.map( text => ( text[ partIndex ] ? text[ partIndex ].rtrim().length : 0 ) ).reduce( ( prev, curr ) =>
+        return texts.map( text => ( text[ partIndex ] ? stringWidth(text[ partIndex ].rtrim()) : 0 ) ).reduce( ( prev, curr ) =>
         {
             return curr >= prev ? curr : prev;
         } );
@@ -211,7 +251,7 @@ function activate( context )
         {
             var addEndingSeparator = vscode.workspace.getConfiguration( 'autoAlign' ).get( 'endingSeparator', false );
             var lastColumn = addEndingSeparator === true ? linePartCount : linePartCount - 1;
-            var max = columnIndex < lastColumn ? columnWidths[ columnIndex ] : ( expand ? 0 : -1 );
+            var max = Math.ceil(columnIndex < lastColumn ? columnWidths[ columnIndex ] : ( expand ? 0 : -1 ));
             if( columnIndex > 0 )
             {
                 appendDelimiter( newLineTexts, separator );
